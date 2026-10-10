@@ -48,6 +48,18 @@ python3 dwg2qet.py breaker_front.dxf --mode thumbnail --px-per-mm 2 \
 python3 dwg2qet.py --batch manifest.csv --out-dir ~/qet/elements/ACME --check
 ```
 
+### Inside QElectroTech's element editor
+
+The element editor's **File > Import DXF** runs `<data folder>/binary/dxf2elmt <file> -v` and opens the element it prints.
+dwg2qet speaks the same interface (`-v` / `--stdout`), so a two-line wrapper makes the editor import symbols with terminals:
+
+```sh
+# macOS: ~/Library/Application Support/QElectroTech/QElectroTech/binary/dxf2elmt   (chmod +x)
+# Linux: ~/.local/share/QElectroTech/QElectroTech/binary/dxf2elmt
+#!/bin/sh
+exec python3 /path/to/dwg2qet.py "$@"
+```
+
 ### Manifest (CSV)
 
 One row per element. Columns: `source`, `output` (relative to `--out-dir`), optional `mode`

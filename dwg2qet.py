@@ -1200,6 +1200,9 @@ def main(argv=None):
     ap.add_argument("--no-label", action="store_true", help="do not add label/comment fields")
     ap.add_argument("--preview", action="store_true", help="also write an .svg preview")
     ap.add_argument("--json", action="store_true", help="print the report as JSON")
+    ap.add_argument("-v", "--stdout", action="store_true",
+                    help="write the .elmt to standard output only (the dxf2elmt interface QElectroTech's "
+                         "element editor uses for File > Import DXF)")
     ap.add_argument("--check", action="store_true", help="run qelectrotech --check-elements on the result")
     ap.add_argument("--batch", help="CSV manifest: one element per row (see README)")
     ap.add_argument("--out-dir", help="batch: collection folder to write into")
@@ -1213,6 +1216,10 @@ def main(argv=None):
     src = Path(ns.input)
     out = Path(ns.output) if ns.output else src.with_suffix(".elmt")
     root, rep = convert(load(src), _options_from(ns), include=ns.layer, exclude=ns.exclude_layer)
+    if ns.stdout:                       # nothing else on stdout or stderr: QElectroTech reads it as is
+        ET.indent(root, space="    ")
+        sys.stdout.buffer.write(ET.tostring(root, encoding="utf-8", xml_declaration=True))
+        return 0
     write_elmt(root, out)
     rep["output"] = str(out)
     if ns.preview:
