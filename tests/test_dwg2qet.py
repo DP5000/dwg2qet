@@ -101,6 +101,22 @@ class Dwg2QetTest(unittest.TestCase):
         names = [t["name"] for t in rep["terminal_list"]]
         self.assertEqual(len(names), len(set(names)))
 
+    def test_arc_extent_is_the_arc_not_the_circle(self):
+        # a quarter arc of radius 10 from 0 to 90 degrees covers x 0..10, y 0..10, not -10..10
+        arc = D.Prim("arc", cx=0, cy=0, r=10, a0=0, a1=90)
+        self.assertEqual([round(v, 6) for v in D.bbox([arc])], [0, 0, 10, 10])
+
+    def test_depth_from_step(self):
+        # a 3D model 80 wide, 160 deep, 287 high; the front view is 80 x 287
+        step = ("ISO-10303-21;\nDATA;\n"
+                + "".join(f"#{i}=CARTESIAN_POINT('',({x},{y},{z}));\n#{i + 100}=VERTEX_POINT('',#{i});\n"
+                          for i, (x, y, z) in enumerate([(0, 0, 0), (80, 160, 287), (40, 10, 100)], 1))
+                + "ENDSEC;\nEND-ISO-10303-21;\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "box.stp"; path.write_text(step)
+            w, h, d = D.depth_from_step(D.step_dimensions(path), 80, 287)
+        self.assertEqual((round(w), round(h), round(d)), (80, 287, 160))
+
     def test_cli_batch(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)

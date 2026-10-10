@@ -19,7 +19,7 @@ turns DXF geometry into an element. dwg2qet adds what a manufacturer CAD library
 | **10 px grid**: scaled and snapped so wires come out straight | – | ✓ |
 | Label and comment fields (`%{label}`, `%{comment}`) | – | ✓ |
 | **Element information** for the bill of materials: manufacturer, article number, EAN, current rating … | – | ✓ |
-| **Width / height / depth in mm** (QElectroTech's own `width`, `height`, `depth` fields) for 2D panel layouts and 3D | – | ✓ |
+| **Width / height / depth in mm** (QElectroTech's own `width`, `height`, `depth` fields) for 2D panel layouts and 3D, also read from the manufacturer's STEP model | – | ✓ |
 | Cabinet front view (`thumbnail`) at a fixed px per mm | – | ✓ |
 | Batch: a CSV manifest into a categorised collection with translated folder names | – | ✓ |
 | SVG preview of each element, `qelectrotech --check-elements` validation | – | ✓ |
@@ -44,6 +44,10 @@ python3 dwg2qet.py breaker.dwg -o breaker.elmt --preview \
 python3 dwg2qet.py breaker_front.dxf --mode thumbnail --px-per-mm 2 \
     --info width=17.7 --info height=80 --info depth=74.9 --exclude-layer "dim.*"
 
+# front view of a drive, width / height / depth taken from its STEP 3D model
+python3 dwg2qet.py MDX61B0015_front.dxf --mode thumbnail --step MDX61B0015.stp \
+    --info manufacturer=SEW-EURODRIVE --info manufacturer_reference=MDX61B0015-5A3-4-00
+
 # a whole library from a manifest, then let QElectroTech check every file
 python3 dwg2qet.py --batch manifest.csv --out-dir ~/qet/elements/ACME --check
 ```
@@ -63,7 +67,7 @@ exec python3 /path/to/dwg2qet.py "$@"
 ### Manifest (CSV)
 
 One row per element. Columns: `source`, `output` (relative to `--out-dir`), optional `mode`
-(`symbol` / `thumbnail`), `layer`, `exclude_layer` (regex, `|`-separated), `link_type`,
+(`symbol` / `thumbnail`), `layer`, `exclude_layer` (regex, `|`-separated), `link_type`, `step` (STEP model),
 `name_<lang>`, `info_<key>`, `kind_<key>`, `category_<lang>` (name of the output folder).
 See [`examples/manifest.csv`](examples/manifest.csv).
 
@@ -78,6 +82,7 @@ See [`examples/manifest.csv`](examples/manifest.csv).
 | `--pitch` | px between poles (default 20, or 10 when the symbol would get too big) |
 | `--target` | rough symbol height in px for single-pole symbols (default 60) |
 | `--thin-layer` | draw these layers with a thin pen (details of a front view) |
+| `--step` | STEP (AP203/AP214) 3D model of the part: width, height and depth in mm come from it, the file name goes to `notes` |
 | `--json` | print the conversion report (terminals, size, notes) |
 
 ## How terminals are found

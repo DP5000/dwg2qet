@@ -573,13 +573,24 @@ class Terminal:
     lead: float = 0.0     # length of the lead segment, drawing units
 
 
+def arc_points(cx, cy, r, a0, span, y_down=False):
+    """x and y of an arc's ends and of the quadrant points it passes (its true extent)."""
+    angles = [a0, a0 + span] + [q for q in range(0, 720, 90) if a0 < q < a0 + span]
+    sy = -1 if y_down else 1
+    return ([cx + r * math.cos(math.radians(a)) for a in angles],
+            [cy + sy * r * math.sin(math.radians(a)) for a in angles])
+
+
 def bbox(prims, texts=False):
     xs, ys = [], []
     for p in prims:
         if p.kind == "polyline":
             xs += [q[0] for q in p.pts]; ys += [q[1] for q in p.pts]
-        elif p.kind in ("circle", "arc"):
+        elif p.kind == "circle":
             xs += [p.cx - p.r, p.cx + p.r]; ys += [p.cy - p.r, p.cy + p.r]
+        elif p.kind == "arc":
+            ax, ay = arc_points(p.cx, p.cy, p.r, p.a0, (p.a1 - p.a0) % 360 or 360)
+            xs += ax; ys += ay
         elif p.kind == "text" and texts:
             xs += [p.cx, p.cx + 0.6 * p.h * len(p.text)]; ys += [p.cy, p.cy + p.h]
     if not xs:
@@ -792,6 +803,32 @@ def snap(v, g=10.0):
     return round(v / g) * g
 
 
+def step_dimensions(path) -> tuple:
+    """Size of a STEP model (x, y, z extent in the file's units) from its B-rep vertices only.
+
+    CARTESIAN_POINT also carries axis placements and other helpers far from the part,
+    so only the points that VERTEX_POINT entities use are measured.
+    """
+    t = Path(path).read_text(errors="replace").replace("\r", "").replace("\n", "")
+    cp = {m.group(1): (float(m.group(2)), float(m.group(3)), float(m.group(4))) for m in re.finditer(
+        r"#(\d+)\s*=\s*CARTESIAN_POINT\s*\(\s*'[^']*'\s*,\s*\(\s*([-0-9.Ee+]+)\s*,\s*([-0-9.Ee+]+)\s*,\s*([-0-9.Ee+]+)\s*\)", t)}
+    pts = [cp[i] for i in re.findall(r"VERTEX_POINT\s*\(\s*'[^']*'\s*,\s*#(\d+)\s*\)", t) if i in cp]
+    if not pts:
+        raise ValueError(f"no B-rep vertices in {path}")
+    xs, ys, zs = zip(*pts)
+    return (max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs))
+
+
+def depth_from_step(dims, front_w, front_h):
+    """Width / height / depth in mm: the two STEP extents that match the front view, and the third."""
+    left = list(dims)
+    out = []
+    for target in (front_w, front_h):
+        k = min(range(len(left)), key=lambda i: abs(left[i] - target))
+        out.append(left.pop(k))
+    return out[0], out[1], left[0]
+
+
 def simplify(pts, tol):
     """Douglas-Peucker: drop points closer than tol to the line through their neighbours."""
     if tol <= 0 or len(pts) < 3:
@@ -854,6 +891,7 @@ class Options:
     grid: float = 10.0
     fallback_terminal: bool = True    # symbol without a lead (lamp, socket): one terminal on top
     simplify_px: float = 0.3          # Douglas-Peucker tolerance for polylines, px (0 = keep all points)
+    step: str | None = None           # STEP model: fills width / height / depth (mm) for 3D
 
 
 INSUNITS_MM = {1: 25.4, 2: 304.8, 4: 1.0, 5: 10.0, 6: 1000.0, 13: 0.001, 14: 0.1}
@@ -885,6 +923,14 @@ def convert(dwg: Drawing, opts: Options, include=None, exclude=None) -> tuple:
             unit = INSUNITS_MM[int(ins)]
         s = opts.scale or opts.px_per_mm * unit
     report["scale_px_per_unit"] = s
+    if opts.step:
+        unit = INSUNITS_MM.get(int(dwg.header.get("$INSUNITS", {}).get(70, 4) or 4), 1.0) * opts.units_mm
+        gx0_, gy0_, gx1_, gy1_ = bbox(geo)
+        w, h, dpt = depth_from_step(step_dimensions(opts.step), (gx1_ - gx0_) * unit, (gy1_ - gy0_) * unit)
+        for k, v in (("width", w), ("height", h), ("depth", dpt)):
+            opts.info.setdefault(k, f"{v:.1f}".rstrip("0").rstrip("."))
+        opts.info.setdefault("notes", f"3D: {Path(opts.step).name}")
+        report["step_mm"] = [round(w, 1), round(h, 1), round(dpt, 1)]
 
     x0, y0, x1, y1 = bbox(geo)
     # origin: first terminal (top-left) in symbol mode, top-left corner otherwise
@@ -999,7 +1045,12 @@ def convert(dwg: Drawing, opts: Options, include=None, exclude=None) -> tuple:
         if kind == "circle":
             xs.append(float(a["x"]) + float(a["diameter"])); ys.append(float(a["y"]) + float(a["diameter"]))
         if kind == "arc":
-            xs.append(float(a["x"]) + float(a["width"])); ys.append(float(a["y"]) + float(a["height"]))
+            # only the part of the circle the arc covers (Qt angles: counter-clockwise, y down)
+            xs.remove(float(a["x"])); ys.remove(float(a["y"]))
+            r = float(a["width"]) / 2
+            ax, ay = arc_points(float(a["x"]) + r, float(a["y"]) + r, r,
+                                float(a["start"]), float(a["angle"]), y_down=True)
+            xs += ax; ys += ay
     for (tx, ty, *_r) in qterms:
         xs.append(tx); ys.append(ty)
     bx0, by0, bx1, by1 = min(xs), min(ys), max(xs), max(ys)
@@ -1171,7 +1222,7 @@ def _options_from(ns, names=None, info=None) -> Options:
                    thin_layers=ns.thin_layer, label=not ns.no_label, link_type=ns.link_type,
                    names=names or _parse_kv(ns.name) or {"en": Path(ns.input).stem if getattr(ns, "input", None) else "element"},
                    info=info if info is not None else _parse_kv(ns.info),
-                   kind=_parse_kv(ns.kind), author=ns.author or "")
+                   kind=_parse_kv(ns.kind), author=ns.author or "", step=getattr(ns, "step", None))
 
 
 def main(argv=None):
@@ -1196,6 +1247,7 @@ def main(argv=None):
     ap.add_argument("--kind", action="append", help="kindInformation key=value")
     ap.add_argument("--link-type", choices=["simple", "master", "slave", "terminal", "thumbnail"])
     ap.add_argument("--author", help="text for the element's informations field")
+    ap.add_argument("--step", help="STEP model of the same part: width/height/depth in mm go to the element information")
     ap.add_argument("--no-texts", action="store_true", help="drop the drawing's texts")
     ap.add_argument("--no-label", action="store_true", help="do not add label/comment fields")
     ap.add_argument("--preview", action="store_true", help="also write an .svg preview")
@@ -1233,7 +1285,7 @@ def main(argv=None):
 
 
 def run_batch(ns):
-    """CSV columns: source, output (relative to --out-dir), mode, layer, exclude_layer,
+    """CSV columns: source, output (relative to --out-dir), mode, layer, exclude_layer, step,
     name_<lang>..., info_<key>..., kind_<key>..., category_<lang> (names for the output folder)."""
     out_dir = Path(ns.out_dir or ".")
     cache: dict = {}
@@ -1253,6 +1305,7 @@ def run_batch(ns):
                 o = _options_from(ns, names=names or {"en": src.stem}, info=info)
                 o.mode = row.get("mode") or ns.mode
                 o.kind = kind or o.kind
+                o.step = row.get("step") or None   # one 3D model per row, never --step for all
                 if row.get("link_type"):
                     o.link_type = row["link_type"]
                 inc = [x for x in (row.get("layer") or "").split("|") if x] or ns.layer
