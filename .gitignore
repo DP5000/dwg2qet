@@ -4,3 +4,4 @@ __pycache__/
 *.svg
 !examples/*.svg
 .DS_Store
+!examples/**/*.elmt
