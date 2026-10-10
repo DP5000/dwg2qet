@@ -69,6 +69,7 @@ class Layout:
     small_pt: int = 5        # terminal number and function
     title_pt: int = 8
     functions: bool = True   # write the function next to side terminals
+    function_chars: int = 30  # longer functions are cut with "…" in the drawing (the table keeps them whole)
 
 
 def _w(text: str, pt: float, bold=False) -> float:
@@ -153,9 +154,17 @@ def blocks_from_spec(spec: dict) -> list:
 # Drawing the symbol
 # --------------------------------------------------------------------------
 
+def _cut(text: str, n: int) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= n else text[:n - 1].rstrip(" ,;:-(") + "…"
+
+
 def draw_symbol(blocks: list, title: list, lay: Layout) -> tuple:
     """Parts (QElectroTech description tags) and terminals of the symbol. The box starts at (0, 0)."""
     P, L = lay.pitch, lay.lead
+    for b in blocks:
+        for t in b.terms:
+            t.function = _cut(t.function, lay.function_chars)
     side = {s: [b for b in blocks if b.side == s] for s in SIDES}
 
     # top / bottom: one column per terminal, an empty column between blocks
@@ -303,6 +312,81 @@ def _uuid(*key) -> str:
     return "{" + str(uuidlib.uuid5(uuidlib.NAMESPACE_URL, "terminals2qet:" + ":".join(key))) + "}"
 
 
+SIDE_WORDS = {"top": "top", "bottom": "bottom", "left": "left", "right": "right",
+              "zgoraj": "top", "spodaj": "bottom", "levo": "left", "desno": "right"}
+
+
+def draw_front_box(w_mm: float, h_mm: float, lines: list, side: str = "", ports: str = "",
+                   px_per_mm: float = 2.0) -> tuple:
+    """Cabinet front view from the outer dimensions alone: the outline at true scale, the name inside and a
+    strip on the side the cables come in. Nothing is drawn where the manufacturer's drawing shows nothing."""
+    W, H = round(w_mm * px_per_mm, 2), round(h_mm * px_per_mm, 2)
+    thin = D._style("thin")
+    r = round(min(6.0, W / 12, H / 12), 1)
+    parts = [("rect", {"x": 0, "y": 0, "width": W, "height": H, "rx": r, "ry": r, "antialias": "false",
+                       "style": D._style()})]
+    if W >= 40 and H >= 40:
+        parts.append(("rect", {"x": 3, "y": 3, "width": W - 6, "height": H - 6, "rx": max(r - 2, 0),
+                               "ry": max(r - 2, 0), "antialias": "false", "style": thin}))
+    side = SIDE_WORDS.get((side or "").strip().lower(), "")
+    if side:
+        t = round(max(4.0, min(14.0, (H if side in ("top", "bottom") else W) * 0.08)), 1)
+        x, y, w, h = {"bottom": (3, H - 3 - t, W - 6, t), "top": (3, 3, W - 6, t),
+                      "left": (3, 3, t, H - 6), "right": (W - 3 - t, 3, t, H - 6)}[side]
+        parts.append(("rect", {"x": x, "y": y, "width": w, "height": h, "antialias": "false",
+                               "style": "line-style:dashed;line-weight:thin;filling:none;color:black"}))
+        if ports and side in ("top", "bottom"):
+            pt = max(3, min(12, int((W - 10) / (0.62 * 1.33 * max(len(ports), 1))), int(t / 1.33)))
+            if pt * 1.33 < t + 1:
+                parts.append(("text", {"x": W / 2 - _w(ports, pt) / 2, "y": y + t / 2 + pt * 0.45, "text": ports,
+                                       "rotation": 0, "font": _font(pt), "color": "#000000"}))
+    lines = [x for x in lines if x]
+    if lines:
+        size = lambda txt, bold: max(3, min(24, int((W * 0.7) / ((0.68 if bold else 0.62) * 1.33 * max(len(txt), 1)))))
+        sizes = [size(x, i == 0) for i, x in enumerate(lines)]
+        step = [sz * 1.33 + 4 for sz in sizes]
+        y = max(H * 0.35 - sum(step) / 2, 6) + step[0]
+        for i, (txt, pt) in enumerate(zip(lines, sizes)):
+            parts.append(("text", {"x": W / 2 - _w(txt, pt, i == 0) / 2, "y": y, "text": txt, "rotation": 0,
+                                   "font": _font(pt, i == 0), "color": "#000000"}))
+            y += step[i + 1] if i + 1 < len(step) else 0
+    parts.append(("dynamic_text", {"x": 0, "y": -14, "info": "label", "size": 8}))
+    return parts, W, H
+
+
+def build_front_box(spec_dims: dict, names: dict, info: dict, lines: list, side: str, ports: str,
+                    informations: str, key: str = "", px_per_mm: float = 2.0) -> ET.Element:
+    w, h = float(spec_dims["width"]), float(spec_dims["height"])
+    parts, W, H = draw_front_box(w, h, lines, side, ports, px_per_mm)
+    x0, y0 = -10, -20
+    x1, y1 = _up10(W + 10), _up10(H + 10)
+    root = ET.Element("definition", {"version": "0.100.0", "type": "element", "link_type": "thumbnail",
+                                     "width": str(int(x1 - x0)), "height": str(int(y1 - y0)),
+                                     "hotspot_x": str(int(-x0)), "hotspot_y": str(int(-y0))})
+    ET.SubElement(root, "uuid", {"uuid": _uuid(key, "front") if key else "{" + str(uuidlib.uuid4()) + "}"})
+    nm = ET.SubElement(root, "names")
+    for lang in sorted(names):
+        ET.SubElement(nm, "name", {"lang": lang}).text = names[lang]
+    ei = ET.SubElement(root, "elementInformations")
+    for k, v in info.items():
+        if v not in (None, ""):
+            ET.SubElement(ei, "elementInformation", {"name": k, "show": "1"}).text = str(v)
+    ET.SubElement(root, "informations").text = informations
+    desc = ET.SubElement(root, "description")
+    for kind, a in parts:
+        if kind == "dynamic_text":
+            d = ET.SubElement(desc, "dynamic_text", {
+                "x": D._fmt(a["x"]), "y": D._fmt(a["y"]), "z": "10", "text_width": "-1",
+                "Halignment": "AlignLeft", "Valignment": "AlignTop", "frame": "false", "rotation": "0",
+                "keep_visual_rotation": "false", "text_from": "ElementInfo",
+                "uuid": "{" + str(uuidlib.uuid4()) + "}", "font": D.FONT.format(a["size"])})
+            ET.SubElement(d, "text").text = ""
+            ET.SubElement(d, "info_name").text = a["info"]
+        else:
+            ET.SubElement(desc, kind, {k: (D._fmt(v) if isinstance(v, (int, float)) else str(v)) for k, v in a.items()})
+    return root
+
+
 def build_element(parts, qterms, W, H, names: dict, info: dict, informations: str, lay: Layout,
                   link_type="simple", key="") -> ET.Element:
     # room for the terminal numbers outside the box, everything on the 10 px grid
@@ -360,7 +444,7 @@ def make_device(spec: dict, base: Path, out: Path, front_out: Path | None = None
     fv = spec.get("front_view")
     if isinstance(fv, str):
         fv = {"file": fv}
-    if fv and front_out:
+    if fv and fv.get("file") and front_out:
         src = (base / fv["file"]).expanduser()
         step = (base / fv["step"]).expanduser() if fv.get("step") else None
         for f in (src, step):
@@ -380,6 +464,25 @@ def make_device(spec: dict, base: Path, out: Path, front_out: Path | None = None
             for k in ("width", "height", "depth"):
                 info.setdefault(k, o.info[k])
             info.setdefault("notes", o.info.get("notes", ""))
+        if preview:
+            D.preview_svg(front_out, front_out.with_suffix(".svg"))
+    elif front_out and spec.get("dimensions_mm"):
+        # no manufacturer drawing: the outline from the datasheet dimensions, at the same scale
+        dims = {k: v for k, v in spec["dimensions_mm"].items() if v}
+        fv = fv or {}
+        for k, short in (("width", "width"), ("height", "height"), ("depth", "depth")):
+            if dims.get(k):
+                info.setdefault(short, f"{float(dims[k]):g}")
+        fnames = {k: f"{v} ({FRONT_VIEW.get(k, FRONT_VIEW['en'])})" for k, v in names.items()}
+        finfo = dict(info, exclude_from_bom="true")
+        side = fv.get("side") or fv.get("stran_prikljuckov") or ""
+        ports = fv.get("ports") or " · ".join(dict.fromkeys(b.name for b in blocks if b.side in ("top", "bottom", "left")))
+        root = build_front_box(dims, fnames, finfo, title[:2], side, ports,
+                               (spec.get("source", "") + "\n" if spec.get("source") else "") +
+                               f"Outline from the datasheet dimensions, terminals2qet {__version__}",
+                               key=str(spec.get("id") or ""), px_per_mm=float(fv.get("px_per_mm", 2.0)))
+        D.write_elmt(root, front_out)
+        report["front_view"] = {"file": str(front_out), "box_mm": [dims.get("width"), dims.get("height"), dims.get("depth")]}
         if preview:
             D.preview_svg(front_out, front_out.with_suffix(".svg"))
 
