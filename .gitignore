@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.elmt
+*.svg
+!examples/*.svg
+.DS_Store

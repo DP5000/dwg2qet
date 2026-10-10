@@ -1,0 +1,3 @@
+source,output,mode,exclude_layer,name_en,name_sl,info_manufacturer,info_manufacturer_reference,info_current_rating,info_width,info_height,info_depth,category_en,category_sl
+drawings/mcb_1p_single_line.dwg,single_line/breakers/MCB-C16-1P.elmt,symbol,dim.*|attr.*,MCB C16 1P,Odklopnik C16 1p,ACME,MCB-C16-1P,16 A,17.7,80,74.9,Circuit breakers,Odklopniki
+drawings/mcb_1p_front.dwg,cabinet_2d/breakers/MCB-C16-1P.elmt,thumbnail,dim.*|attr.*,MCB C16 1P (front view),Odklopnik C16 1p (pogled),ACME,MCB-C16-1P,16 A,17.7,80,74.9,Circuit breakers,Odklopniki
