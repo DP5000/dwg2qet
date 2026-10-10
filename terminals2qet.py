@@ -213,9 +213,11 @@ def draw_symbol(blocks: list, title: list, lay: Layout) -> tuple:
 
     y0 = _up10(top_h + P)                          # first side row
     side_rows = max(nl, nr)
-    title_h = 14 * len(title) + 32
+    LABEL_H = 36                                   # label (9 pt) and comment (7 pt) above the title
+    title_h = 14 * len(title) + 32 + LABEL_H
     body_mid = max(side_rows * P, title_h)
     H = _up10(y0 + body_mid + bot_h)
+    H = max(H, _up10(top_h + LABEL_H + 14 * len(title) + 24 + bot_h))
     if side_rows:
         H = max(H, _up10(y0 + (side_rows - 1) * P + P / 2 + bot_h + 10))
 
@@ -297,7 +299,7 @@ def draw_symbol(blocks: list, title: list, lay: Layout) -> tuple:
     # title in the middle, label and comment above it
     left_end, right_start = lf + lfunc, W - rf - rfunc
     cx = (left_end + right_start) / 2
-    ty = max(top_h + 20, (H - 14 * len(title)) / 2)
+    ty = max(top_h + LABEL_H + 18, (H - 14 * len(title)) / 2 + 10)
     for k, s in enumerate(title):
         pt = lay.title_pt if k == 0 else lay.name_pt
         text(cx - _w(s, pt, k == 0) / 2, ty + 14 * k, s, pt, bold=(k == 0))
