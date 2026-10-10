@@ -1157,7 +1157,9 @@ def preview_svg(elmt: Path, out: Path, pad=10):
             body.append(f'<path d="M{p0[0]:.2f},{p0[1]:.2f} A{rx:.2f},{ry:.2f} 0 {large} 0 {p1[0]:.2f},{p1[1]:.2f}" fill="none" stroke="black" stroke-width="{sw}"/>')
         elif n.tag == "text":
             size = float(a.get("font", "x,9").split(",")[1]) * 1.33
-            body.append(f'<text x="{a["x"]}" y="{a["y"]}" font-family="Liberation Sans, Arial" font-size="{size:.1f}">{html.escape(a.get("text", ""))}</text>')
+            rot = float(a.get("rotation", 0) or 0)
+            tf = f' transform="rotate({rot:g} {a["x"]} {a["y"]})"' if rot else ""
+            body.append(f'<text x="{a["x"]}" y="{a["y"]}"{tf} font-family="Liberation Sans, Arial" font-size="{size:.1f}">{html.escape(a.get("text", ""))}</text>')
         elif n.tag == "dynamic_text":
             body.append(f'<text x="{a["x"]}" y="{float(a["y"]) + 9}" font-family="Arial" font-size="8" fill="#2a6fdb">{html.escape("%{" + (n.findtext("info_name") or "") + "}")}</text>')
         elif n.tag == "terminal":
@@ -1188,15 +1190,28 @@ def write_category(folder: Path, names: dict):
 
 
 def check_with_qelectrotech(path: Path, binary: str | None = None) -> str:
+    """qelectrotech --check-elements on a file or folder. Older builds have no such option and print
+    nothing, so without an explicit binary every installed QElectroTech is tried, newest first."""
     import glob
-    exe = binary or os.environ.get("QET_BINARY") or shutil.which("qelectrotech") or next(
-        iter(sorted(glob.glob("/Applications/*[Qq][Ee]lectro[Tt]ech*.app/Contents/MacOS/qelectrotech"), reverse=True)), None)
-    if not exe:
+
+    def version(exe):
+        m = re.search(r"(\d+(?:\.\d+)+)", exe.split("/Contents/")[0])
+        return tuple(int(x) for x in m.group(1).split(".")) if m else ()
+
+    found = sorted(glob.glob("/Applications/*[Qq][Ee]lectro[Tt]ech*.app/Contents/MacOS/qelectrotech"), key=version, reverse=True)
+    pinned = binary or os.environ.get("QET_BINARY")
+    candidates = [pinned] if pinned else [e for e in [shutil.which("qelectrotech")] + found if e]
+    if not candidates:
         return "qelectrotech not found: skipped --check"
-    env = dict(os.environ, QT_QPA_PLATFORM=os.environ.get("QT_QPA_PLATFORM", "offscreen"))
-    p = subprocess.run([exe, "--check-elements", str(path)], capture_output=True, text=True, env=env, timeout=600)
-    lines = [l for l in (p.stdout + p.stderr).splitlines() if re.search(r"^(OK|WARN|FAIL)|file\(s\)", l)]
-    return "\n".join(lines[-50:])
+    for exe in candidates:
+        # own settings folder: a QElectroTech that is already open would otherwise take the call and print nothing
+        with tempfile.TemporaryDirectory(prefix="dwg2qet-check-") as tmp:
+            env = dict(os.environ, QT_QPA_PLATFORM=os.environ.get("QT_QPA_PLATFORM", "offscreen"), QET_SETTINGS_DIR=tmp)
+            p = subprocess.run([exe, "--check-elements", str(path)], capture_output=True, text=True, env=env, timeout=600)
+        lines = [l for l in (p.stdout + p.stderr).splitlines() if re.search(r"^(OK|WARN|FAIL)|file\(s\)", l)]
+        if lines:
+            return "\n".join(lines[-50:])
+    return f"{candidates[-1]} printed no check result (QElectroTech 0.200 or newer has --check-elements)"
 
 
 # --------------------------------------------------------------------------

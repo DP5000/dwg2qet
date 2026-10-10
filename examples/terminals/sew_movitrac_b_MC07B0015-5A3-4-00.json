@@ -1,0 +1,215 @@
+{
+ "id": "MC07B0015-5A3-4-00",
+ "names": {
+  "en": "MOVITRAC B frequency inverter 1.5 kW 3x400 V (MC07B0015-5A3-4-00)",
+  "de": "MOVITRAC B Frequenzumrichter 1,5 kW 3x400 V (MC07B0015-5A3-4-00)",
+  "fr": "Variateur MOVITRAC B 1,5 kW 3x400 V (MC07B0015-5A3-4-00)",
+  "sl": "Frekvenčni pretvornik MOVITRAC B 1,5 kW 3x400 V (MC07B0015-5A3-4-00)"
+ },
+ "title": [
+  "MOVITRAC B",
+  "MC07B0015-5A3-4-00",
+  "1.5 kW  3 x AC 380-500 V"
+ ],
+ "info": {
+  "manufacturer": "SEW-EURODRIVE",
+  "manufacturer_reference": "MC07B0015-5A3-4-00",
+  "designation": "MOVITRAC B 1.5 kW 3x400 V",
+  "description": "Frequency inverter, size 0S, 3 x AC 380-500 V, line current 3.6 A, output current 4.0 A, part number 8285209",
+  "current_rating": "4.0 A"
+ },
+ "source": "SEW-EURODRIVE MOVITRAC B System Manual, edition 01/2024: wiring diagram, electronics data, technical data size 0S. PE of size 0 is the shield plate. * = factory setting.",
+ "front_view": {
+  "file": "MC07B0015-5A3-4-00/MC07B0015_front.dxf",
+  "step": "MC07B0015-5A3-4-00/MC07B0015.stp",
+  "download": "SEW Online Support > CAD data > MC07B0015-5A3-4-00: 2D front view (DXF) and 3D (STEP)"
+ },
+ "blocks": [
+  {
+   "block": "X1",
+   "side": "top",
+   "title": "Line",
+   "terminals": [
+    [
+     "",
+     "L1"
+    ],
+    [
+     "",
+     "L2"
+    ],
+    [
+     "",
+     "L3"
+    ],
+    [
+     "",
+     "PE"
+    ]
+   ]
+  },
+  {
+   "block": "X2",
+   "side": "bottom",
+   "title": "Motor",
+   "terminals": [
+    [
+     "",
+     "PE"
+    ],
+    [
+     "",
+     "U"
+    ],
+    [
+     "",
+     "V"
+    ],
+    [
+     "",
+     "W"
+    ]
+   ]
+  },
+  {
+   "block": "X3",
+   "side": "bottom",
+   "title": "Braking resistor",
+   "terminals": [
+    [
+     "",
+     "+R"
+    ],
+    [
+     "",
+     "-R"
+    ],
+    [
+     "",
+     "PE"
+    ]
+   ]
+  },
+  {
+   "block": "X10",
+   "side": "left",
+   "title": "Analog setpoint",
+   "terminals": [
+    [
+     "1",
+     "REF1",
+     "+10 V, max. 3 mA"
+    ],
+    [
+     "2",
+     "AI11",
+     "Setpoint + (0-10 V / 0(4)-20 mA)"
+    ],
+    [
+     "3",
+     "AI12",
+     "Setpoint -"
+    ],
+    [
+     "4",
+     "GND",
+     "Reference analog signals"
+    ]
+   ]
+  },
+  {
+   "block": "X12",
+   "side": "left",
+   "title": "Digital inputs",
+   "terminals": [
+    [
+     "1",
+     "DI00",
+     "Fault reset*"
+    ],
+    [
+     "2",
+     "DI01",
+     "CW/stop (fixed)"
+    ],
+    [
+     "3",
+     "DI02",
+     "CCW/stop*"
+    ],
+    [
+     "4",
+     "DI03",
+     "Enable/stop*"
+    ],
+    [
+     "5",
+     "DI04",
+     "n11/n21* (frequency input)"
+    ],
+    [
+     "6",
+     "DI05TF",
+     "n12/n22* (TF input)"
+    ],
+    [
+     "7",
+     "VOTF",
+     "Supply TF/TH"
+    ],
+    [
+     "8",
+     "24VIO",
+     "+24 V input/output"
+    ],
+    [
+     "9",
+     "GND",
+     "Reference binary signals"
+    ]
+   ]
+  },
+  {
+   "block": "X13",
+   "side": "right",
+   "title": "Digital outputs",
+   "terminals": [
+    [
+     "1",
+     "GND",
+     "Reference"
+    ],
+    [
+     "2",
+     "DO02",
+     "Brake released*"
+    ],
+    [
+     "3",
+     "DO03",
+     "Ready*"
+    ],
+    [
+     "4",
+     "GND",
+     "Reference"
+    ],
+    [
+     "5",
+     "DO01-C",
+     "Relay common (fault*)"
+    ],
+    [
+     "6",
+     "DO01-NO",
+     "Relay NO"
+    ],
+    [
+     "7",
+     "DO01-NC",
+     "Relay NC"
+    ]
+   ]
+  }
+ ]
+}

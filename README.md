@@ -104,6 +104,40 @@ QElectroTech 0.200 (`--check-elements`: 0 failures). The terminals of contactors
 RCDs and breakers match the drawings. Vendor CAD data is not part of this repository. Convert your
 own, within its licence.
 
+## Complex devices from a terminal table: terminals2qet
+
+Drives, PLCs and inverters have no schematic symbol in their DXF. Their manual has a terminal table
+instead. `terminals2qet.py` turns that table into the symbol and, in the same run, the cabinet front view
+(dwg2qet) with width / height / depth from the manufacturer's STEP model:
+
+```bash
+# the symbol
+python3 terminals2qet.py examples/terminals/sew_movidrive_b_MDX61B0015-5A3-4-00.json \
+    -o SEW/schematic/MDX61B0015-5A3-4-00.elmt --check
+# the whole device, once SEW's DXF front view and STEP model sit next to the JSON
+python3 terminals2qet.py examples/terminals/sew_movidrive_b_MDX61B0015-5A3-4-00.json \
+    -o SEW/schematic/MDX61B0015-5A3-4-00.elmt --front-out SEW/cabinet/MDX61B0015-5A3-4-00.elmt --check
+```
+
+* every terminal on the 10 px grid, named as in the manual (`X13:1`), its designation inside the box (`DI00`),
+  its number outside and its function next to it;
+* each block framed like a terminal strip; mains at the top, motor and brake at the bottom,
+  control blocks on the side the table gives;
+* label and comment fields, element information for the bill of materials, the source of the table;
+* the same uuids each time a device is drawn again, so the projects that use it keep their wires.
+
+The table is JSON (`blocks` with `[terminal, name, function]` rows, see
+[`examples/terminals/`](examples/terminals)) or CSV (`block, terminal, name, side, function`).
+An AI assistant can copy it from the manual; the drawing itself is always the program's.
+
+![MOVIDRIVE B MDX61B0015-5A3-4-00: 51 terminals from SEW's compact operating instructions](docs/terminals2qet-movidrive-b.png)
+
+![MOVITRAC B wired with QElectroTech's own breaker, motor and switches](docs/terminals2qet-movitrac-b-wired.png)
+
+The two SEW examples come from SEW's public documentation (MOVITRAC B system manual 01/2024, MOVIDRIVE B
+compact operating instructions 11/2017). The front views and STEP models referenced by `front_view` are SEW's
+own CAD downloads (SEW Online Support > CAD data). They are not part of this repository.
+
 ## Tests
 
 ```bash
@@ -122,4 +156,5 @@ in its format. Thanks to the QElectroTech, LibreDWG and dxf2elmt projects.
 Pretvornik risb DWG in DXF v elemente QElectroTech. Simbol dobi priključke na mreži 10 px s
 pravimi imeni (1, 2, A1, A2 …), polja za oznako in podatke ter podatke za kosovnico in mere za
 2D in 3D. Pogled od spredaj je v merilu (2 px = 1 mm). Iz manifesta CSV pretvori celotno
-knjižnico proizvajalca. Avtor: David Podlesnik (Elektro David Podlesnik s.p.). Licenca MIT.
+knjižnico proizvajalca. `terminals2qet.py` iz tabele priključkov v priročniku nariše simbol
+zahtevne naprave (pretvornik, PLC, razsmernik), skupaj s pogledom za omaro in merami iz STEP. Avtor: David Podlesnik (Elektro David Podlesnik s.p.). Licenca MIT.

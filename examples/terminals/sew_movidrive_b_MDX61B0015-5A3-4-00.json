@@ -1,0 +1,341 @@
+{
+ "id": "MDX61B0015-5A3-4-00",
+ "names": {
+  "en": "MOVIDRIVE B drive inverter 1.5 kW 3x400 V (MDX61B0015-5A3-4-00)",
+  "de": "MOVIDRIVE B Antriebsumrichter 1,5 kW 3x400 V (MDX61B0015-5A3-4-00)",
+  "fr": "Variateur MOVIDRIVE B 1,5 kW 3x400 V (MDX61B0015-5A3-4-00)",
+  "sl": "Frekvenčni pretvornik MOVIDRIVE B 1,5 kW 3x400 V (MDX61B0015-5A3-4-00)"
+ },
+ "title": [
+  "MOVIDRIVE B",
+  "MDX61B0015-5A3-4-00",
+  "1.5 kW  3 x AC 380-500 V"
+ ],
+ "info": {
+  "manufacturer": "SEW-EURODRIVE",
+  "manufacturer_reference": "MDX61B0015-5A3-4-00",
+  "designation": "MOVIDRIVE B 1.5 kW 3x400 V",
+  "description": "Drive inverter MDX61B, size 1, 3 x AC 380-500 V, option slots; XT service interface; switches S11-S14"
+ },
+ "source": "SEW-EURODRIVE Compact Operating Instructions MOVIDRIVE MDX60B/61B 24770531/EN 11/2017, ch. 3.1.5 terminal functions; Data sheet UL 20116144/EN 03/2013 (size 1: PE next to X4). * = factory setting.",
+ "front_view": {
+  "file": "MDX61B0015-5A3-4-00/MDX61B0015_front.dxf",
+  "step": "MDX61B0015-5A3-4-00/MDX61B0015.stp",
+  "download": "SEW Online Support > CAD data > MDX61B0015-5A3-4-00: 2D front view (DXF) and 3D (STEP)"
+ },
+ "blocks": [
+  {
+   "block": "X1",
+   "side": "top",
+   "title": "Line",
+   "terminals": [
+    [
+     "1",
+     "L1"
+    ],
+    [
+     "2",
+     "L2"
+    ],
+    [
+     "3",
+     "L3"
+    ]
+   ]
+  },
+  {
+   "block": "X4",
+   "side": "top",
+   "title": "DC link",
+   "terminals": [
+    [
+     "",
+     "-UZ"
+    ],
+    [
+     "",
+     "+UZ"
+    ],
+    [
+     "",
+     "PE"
+    ]
+   ]
+  },
+  {
+   "block": "X2",
+   "side": "bottom",
+   "title": "Motor",
+   "terminals": [
+    [
+     "4",
+     "U"
+    ],
+    [
+     "5",
+     "V"
+    ],
+    [
+     "6",
+     "W"
+    ]
+   ]
+  },
+  {
+   "block": "X3",
+   "side": "bottom",
+   "title": "Braking resistor",
+   "terminals": [
+    [
+     "8",
+     "+R"
+    ],
+    [
+     "9",
+     "-R"
+    ],
+    [
+     "",
+     "PE"
+    ]
+   ]
+  },
+  {
+   "block": "X11",
+   "side": "left",
+   "title": "Analog setpoint",
+   "terminals": [
+    [
+     "1",
+     "REF1",
+     "+10 V, max. 3 mA"
+    ],
+    [
+     "2",
+     "AI11",
+     "Setpoint n1 +"
+    ],
+    [
+     "3",
+     "AI12",
+     "Setpoint n1 -"
+    ],
+    [
+     "4",
+     "AGND",
+     "Reference analog signals"
+    ],
+    [
+     "5",
+     "REF2",
+     "-10 V, max. 3 mA"
+    ]
+   ]
+  },
+  {
+   "block": "X13",
+   "side": "left",
+   "title": "Digital inputs",
+   "terminals": [
+    [
+     "1",
+     "DI00",
+     "/Controller inhibit (fixed)"
+    ],
+    [
+     "2",
+     "DI01",
+     "CW/stop*"
+    ],
+    [
+     "3",
+     "DI02",
+     "CCW/stop*"
+    ],
+    [
+     "4",
+     "DI03",
+     "Enable/stop*"
+    ],
+    [
+     "5",
+     "DI04",
+     "n11/n21*"
+    ],
+    [
+     "6",
+     "DI05",
+     "n12/n22*"
+    ],
+    [
+     "7",
+     "DCOM",
+     "Reference DI00-DI05, DI06-DI07"
+    ],
+    [
+     "8",
+     "VO24",
+     "+24 V output"
+    ],
+    [
+     "9",
+     "DGND",
+     "Reference binary signals"
+    ],
+    [
+     "10",
+     "ST11",
+     "RS485+"
+    ],
+    [
+     "11",
+     "ST12",
+     "RS485-"
+    ]
+   ]
+  },
+  {
+   "block": "X17",
+   "side": "left",
+   "title": "Safe torque off",
+   "terminals": [
+    [
+     "1",
+     "DGND",
+     "Reference X17:2"
+    ],
+    [
+     "2",
+     "VO24",
+     "+24 V, only for X17:4"
+    ],
+    [
+     "3",
+     "SOV24",
+     "Reference STO input"
+    ],
+    [
+     "4",
+     "SVI24",
+     "+24 V STO input"
+    ]
+   ]
+  },
+  {
+   "block": "X10",
+   "side": "right",
+   "title": "Digital outputs",
+   "terminals": [
+    [
+     "1",
+     "TF1",
+     "KTY+/TF/TH"
+    ],
+    [
+     "2",
+     "DGND",
+     "Reference / KTY-"
+    ],
+    [
+     "3",
+     "DB00",
+     "/Brake (fixed)"
+    ],
+    [
+     "4",
+     "DO01-C",
+     "Relay common (ready*)"
+    ],
+    [
+     "5",
+     "DO01-NO",
+     "Relay NO"
+    ],
+    [
+     "6",
+     "DO01-NC",
+     "Relay NC"
+    ],
+    [
+     "7",
+     "DO02",
+     "/Fault*"
+    ],
+    [
+     "8",
+     "VO24",
+     "+24 V output"
+    ],
+    [
+     "9",
+     "VI24",
+     "+24 V backup input"
+    ],
+    [
+     "10",
+     "DGND",
+     "Reference binary signals"
+    ]
+   ]
+  },
+  {
+   "block": "X16",
+   "side": "right",
+   "title": "Digital I/O",
+   "terminals": [
+    [
+     "1",
+     "DI06",
+     "No function*"
+    ],
+    [
+     "2",
+     "DI07",
+     "No function*"
+    ],
+    [
+     "3",
+     "DO03",
+     "IPOS output*"
+    ],
+    [
+     "4",
+     "DO04",
+     "IPOS output*"
+    ],
+    [
+     "5",
+     "DO05",
+     "IPOS output*"
+    ],
+    [
+     "6",
+     "DGND",
+     "Reference binary signals"
+    ]
+   ]
+  },
+  {
+   "block": "X12",
+   "side": "right",
+   "title": "System bus",
+   "terminals": [
+    [
+     "1",
+     "DGND",
+     "Reference SBus"
+    ],
+    [
+     "2",
+     "SC11",
+     "SBus high"
+    ],
+    [
+     "3",
+     "SC12",
+     "SBus low"
+    ]
+   ]
+  }
+ ]
+}
