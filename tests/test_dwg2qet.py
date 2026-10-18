@@ -129,5 +129,112 @@ class Dwg2QetTest(unittest.TestCase):
             self.assertTrue((tmp / "lib/breakers/qet_directory").exists())
 
 
+    # --- review of Laurent Trinques (discussion #1452) ---------------------------------------------
+
+    def uuids(self, root):
+        return [e.get("uuid") for e in root.iter() if e.tag in ("uuid", "terminal", "dynamic_text")]
+
+    def test_uuids_are_deterministic(self):
+        r1, _ = self.convert(BREAKER, ident=D.source_ident("breaker.dxf"))
+        r2, _ = self.convert(BREAKER, ident=D.source_ident("breaker.dxf"))
+        r3, _ = self.convert(BREAKER, ident=D.source_ident("other.dxf"))
+        u1, u2, u3 = self.uuids(r1), self.uuids(r2), self.uuids(r3)
+        self.assertEqual(u1, u2)                         # regenerated: same element, same terminals
+        self.assertEqual(len(set(u1)), len(u1))          # all different inside one element
+        self.assertTrue(set(u1).isdisjoint(u3))          # another drawing: other uuids
+        thumb, _ = self.convert(BREAKER, mode="thumbnail", ident=D.source_ident("breaker.dxf", "thumbnail"))
+        self.assertNotEqual(self.uuids(thumb)[0], u1[0])  # symbol and cabinet view are two elements
+
+    def test_cli_keeps_uuids_when_run_again(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "a.dxf").write_text(dxf(BREAKER))
+            got = []
+            for _ in range(2):
+                self.assertEqual(D.main([str(tmp / "a.dxf"), "-o", str(tmp / "a.elmt")]), 0)
+                got.append(self.uuids(ET.parse(tmp / "a.elmt").getroot()))
+            self.assertEqual(got[0], got[1])
+
+    def test_split_on_line_feeds_only(self):
+        # \x0b and \u2028 inside a text value must not shift the following code/value pairs
+        body = BREAKER + text(5, 5, "A\x0bB\u2028C", 0.8)
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "t.dxf"
+            p.write_text(dxf(body), encoding="utf-8")
+            pairs = D.read_pairs(p)
+            self.assertIn((1, "A\x0bB\u2028C"), pairs)
+            self.assertTrue(all(isinstance(c, int) for c, _ in pairs))
+        root, rep = self.convert(body)                   # the element is still well-formed XML
+        self.assertEqual(rep["terminals"], 2)
+        self.assertIn("A B\u2028C", [e.get("text") for e in root.iter("text")])
+
+    def test_arc_in_non_uniformly_scaled_block_is_elliptical(self):
+        blocks = ("0\nBLOCK\n8\n0\n2\nRING\n10\n0\n20\n0\n70\n0\n"
+                  "0\nCIRCLE\n8\n0\n10\n0\n20\n0\n40\n1\n0\nENDBLK\n")
+        ins = "0\nINSERT\n8\nSYM\n2\nRING\n10\n0\n20\n0\n41\n3\n42\n1\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "t.dxf"
+            p.write_text(dxf(ins, blocks))
+            prims = D.flatten(D.read_dxf(p))
+        self.assertEqual([q.kind for q in prims], ["polyline"])          # not a circle any more
+        xs = [x for x, _ in prims[0].pts]; ys = [y for _, y in prims[0].pts]
+        self.assertAlmostEqual(max(xs) - min(xs), 6.0, places=2)           # 2 r · sx
+        self.assertAlmostEqual(max(ys) - min(ys), 2.0, places=2)           # 2 r · sy
+        uniform = ins.replace("41\n3\n42\n1", "41\n2\n42\n2")
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "t.dxf"
+            p.write_text(dxf(uniform, blocks))
+            prims = D.flatten(D.read_dxf(p))
+        self.assertEqual([q.kind for q in prims], ["circle"])              # uniform scale keeps the circle
+
+    def test_insert_on_frozen_layer_is_hidden(self):
+        blocks = ("0\nBLOCK\n8\n0\n2\nLEAD\n10\n0\n20\n0\n70\n0\n" + line(0, 0, 0, 3, layer="SYM") + "0\nENDBLK\n")
+        body = "0\nINSERT\n8\nSYM\n2\nLEAD\n10\n0\n20\n0\n" + "0\nINSERT\n8\nHIDDEN\n2\nLEAD\n10\n5\n20\n0\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "t.dxf"
+            p.write_text(dxf(body, blocks))
+            prims = D.flatten(D.read_dxf(p))
+        self.assertEqual(len(prims), 1)                  # the copy on the frozen layer HIDDEN is gone
+        self.assertEqual(prims[0].pts[0][0], 0.0)
+
+    def test_polyface_mesh_draws_its_edges(self):
+        v = lambda x, y, f: f"0\nVERTEX\n8\nSYM\n10\n{x}\n20\n{y}\n70\n{f}\n"
+        face = lambda a, b, c, d: f"0\nVERTEX\n8\nSYM\n10\n0\n20\n0\n70\n128\n71\n{a}\n72\n{b}\n73\n{c}\n74\n{d}\n"
+        body = ("0\nPOLYLINE\n8\nSYM\n66\n1\n70\n64\n71\n4\n72\n2\n" + v(0, 0, 192) + v(4, 0, 192) + v(4, 4, 192) +
+                v(0, 4, 192) + face(1, 2, 3, 0) + face(1, 3, -4, 0) + "0\nSEQEND\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "t.dxf"
+            p.write_text(dxf(body))
+            prims = D.flatten(D.read_dxf(p))
+        edges = {tuple(sorted((q.pts[0], q.pts[1]))) for q in prims}
+        self.assertTrue(all(len(q.pts) == 2 for q in prims))           # edges, not one polyline
+        self.assertIn(((0.0, 0.0), (4.0, 4.0)), edges)                   # the shared diagonal, once
+        self.assertNotIn(((0.0, 0.0), (0.0, 4.0)), edges)                # 4 -> 1 marked invisible (-4)
+        self.assertEqual(len(prims), 4)
+
+    def test_polygon_mesh_draws_its_grid(self):
+        v = lambda x, y: f"0\nVERTEX\n8\nSYM\n10\n{x}\n20\n{y}\n70\n64\n"
+        body = ("0\nPOLYLINE\n8\nSYM\n66\n1\n70\n16\n71\n2\n72\n3\n" +
+                "".join(v(x, y) for y in (0, 2) for x in (0, 1, 2)) + "0\nSEQEND\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "t.dxf"
+            p.write_text(dxf(body))
+            prims = D.flatten(D.read_dxf(p))
+        self.assertEqual(len(prims), 2 + 3)              # M rows + N columns
+
+    def test_binary_dxf_gives_a_clear_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "b.dxf"
+            p.write_bytes(D.BINARY_DXF + b"\r\n\x1a\x00" + bytes(64))
+            with self.assertRaises(ValueError) as cm:
+                D.read_pairs(p)
+            self.assertIn("binary DXF", str(cm.exception))
+            self.assertEqual(D.main([str(p), "-o", str(Path(tmp) / "b.elmt")]), 2)
+
+    def test_element_version(self):
+        root, _ = self.convert(BREAKER)
+        self.assertEqual(root.get("version"), "0.200")
+
+
 if __name__ == "__main__":
     unittest.main()

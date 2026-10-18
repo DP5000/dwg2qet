@@ -63,6 +63,9 @@ class Terminals2QetTest(unittest.TestCase):
         b, _ = self.build()
         self.assertEqual([t["uuid"] for t in terminals(a)], [t["uuid"] for t in terminals(b)])
         self.assertEqual(a.find("uuid").get("uuid"), b.find("uuid").get("uuid"))
+        every = lambda r: [e.get("uuid") for e in r.iter() if e.get("uuid")]   # label/comment texts too
+        self.assertEqual(every(a), every(b))
+        self.assertEqual(len(set(every(a))), len(every(a)))
 
     def test_csv_table(self):
         with tempfile.TemporaryDirectory() as tmp:

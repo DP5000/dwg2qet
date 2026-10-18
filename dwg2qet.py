@@ -35,7 +35,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 # --------------------------------------------------------------------------
 # DXF reading
@@ -62,9 +62,18 @@ def _unescape(s: str) -> str:
     return re.sub(r"\\U\+([0-9A-Fa-f]{4})", lambda m: chr(int(m.group(1), 16)), s)
 
 
+BINARY_DXF = b"AutoCAD Binary DXF"
+XML_BAD = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
+
+
 def read_pairs(path: Path) -> list:
-    text = _decode(path.read_bytes())
-    lines = text.splitlines()
+    raw = path.read_bytes()
+    if raw.startswith(BINARY_DXF):
+        raise ValueError(f"{path.name}: binary DXF is not supported - save it as ASCII DXF, or give the DWG")
+    text = _decode(raw)
+    # split on line feeds only: str.splitlines() also splits on \x0b, \x1c, \u2028 ... which may occur
+    # inside a text value and would shift every following code/value pair
+    lines = text.split("\n") if "\n" in text else text.split("\r")
     out = []
     for i in range(0, len(lines) - 1, 2):
         try:
@@ -277,6 +286,12 @@ class Xf:
     def mirrored(self):
         return self.a * self.d - self.b * self.c < 0
 
+    @property
+    def conformal(self):
+        """True when circles stay circles: rotation, uniform scale, mirror (no sx != sy, no shear)."""
+        n1, n2 = self.a * self.a + self.b * self.b, self.c * self.c + self.d * self.d
+        return abs(n1 - n2) <= 1e-9 * max(n1, n2, 1e-30) and abs(self.a * self.c + self.b * self.d) <= 1e-9 * max(n1, n2, 1e-30)
+
 
 def _bulge_points(p0, p1, bulge, seg_deg=10.0):
     """Points of the arc from p0 to p1 with a DXF bulge (excluding p0)."""
@@ -361,6 +376,10 @@ def flatten(dwg: Drawing, include=None, exclude=None, keep_dimensions=False,
             name = ent.get(2, "").strip()
             if name.startswith("*D") and not keep_dimensions:
                 return
+            # a frozen layer hides the whole block reference; an off layer hides only what is drawn on
+            # layer 0 inside it (those entities take the insert's layer, checked below)
+            if dwg.layers.get(layer, {}).get("frozen"):
+                return
             if name not in dwg.blocks or depth >= max_depth:
                 return
             (bx, by), bents = dwg.blocks[name]
@@ -402,6 +421,40 @@ def flatten(dwg: Drawing, include=None, exclude=None, keep_dimensions=False,
             closed = bool(int(ent.get(70, 0, float) or 0) & 1)
             pts = [xf(*p) for p in _poly_from_vertices(verts, bul, closed)]
             prims.append(Prim("polyline", pts, closed=closed, layer=layer))
+        elif t == "POLYLINE" and int(ent.get(70, 0, float) or 0) & 64:
+            # polyface mesh: vertex records (flag 64+128) then face records (flag 128) with 1-based
+            # indices in 71..74; a negative index marks the edge after it as invisible
+            vpos, faces = [], []
+            for vx in ent.children:
+                if vx.type != "VERTEX":
+                    continue
+                vf = int(vx.get(70, 0, float) or 0)
+                if vf & 64:
+                    vpos.append((vx.get(10, 0.0, float), vx.get(20, 0.0, float)))
+                elif vf & 128:
+                    faces.append([int(vx.get(c, 0, float) or 0) for c in (71, 72, 73, 74)])
+            done = set()
+            for f in faces:
+                idx = [i for i in f if i]
+                for k, i in enumerate(idx):
+                    j = idx[(k + 1) % len(idx)]
+                    if i < 0 or not (0 < abs(i) <= len(vpos) and 0 < abs(j) <= len(vpos)):
+                        continue
+                    e = tuple(sorted((abs(i), abs(j))))
+                    if e[0] != e[1] and e not in done:
+                        done.add(e)
+                        prims.append(Prim("polyline", [xf(*vpos[e[0] - 1]), xf(*vpos[e[1] - 1])], layer=layer))
+        elif t == "POLYLINE" and int(ent.get(70, 0, float) or 0) & 16:
+            # polygon mesh: M x N vertices (71, 72), closed in M (flag 1) and/or N (flag 32)
+            fl = int(ent.get(70, 0, float) or 0)
+            m, n = int(ent.get(71, 0, float) or 0), int(ent.get(72, 0, float) or 0)
+            vpos = [(vx.get(10, 0.0, float), vx.get(20, 0.0, float)) for vx in ent.children if vx.type == "VERTEX"]
+            if m * n and len(vpos) >= m * n:
+                grid = [[vpos[i * n + j] for j in range(n)] for i in range(m)]
+                for i in range(m):
+                    prims.append(Prim("polyline", [xf(*q) for q in grid[i]], closed=bool(fl & 32), layer=layer))
+                for j in range(n):
+                    prims.append(Prim("polyline", [xf(*grid[i][j]) for i in range(m)], closed=bool(fl & 1), layer=layer))
         elif t == "POLYLINE":
             verts, bul = [], []
             for vx in ent.children:
@@ -412,6 +465,15 @@ def flatten(dwg: Drawing, include=None, exclude=None, keep_dimensions=False,
                 closed = bool(int(ent.get(70, 0, float) or 0) & 1)
                 prims.append(Prim("polyline", [xf(*p) for p in _poly_from_vertices(verts, bul, closed)],
                                   closed=closed, layer=layer))
+        elif t in ("CIRCLE", "ARC") and not xf.conformal:
+            # block inserted with sx != sy (or sheared): the circle is an ellipse, the arc an elliptical arc
+            lx, ly, lr = ent.get(10, 0.0, float), ent.get(20, 0.0, float), ent.get(40, 0.0, float)
+            a0, a1 = (0.0, 360.0) if t == "CIRCLE" else (ent.get(50, 0.0, float), ent.get(51, 360.0, float))
+            span = (a1 - a0) % 360 or 360.0
+            n = max(8, int(math.ceil(span / 5)))
+            pts = [xf(lx + lr * math.cos(math.radians(a0 + span * k / n)), ly + lr * math.sin(math.radians(a0 + span * k / n)))
+                   for k in range(n + 1)]
+            prims.append(Prim("polyline", pts, closed=(t == "CIRCLE"), layer=layer))
         elif t in ("CIRCLE", "ARC"):
             cx, cy = xf(ent.get(10, 0.0, float), ent.get(20, 0.0, float))
             r = ent.get(40, 0.0, float) * xf.scale
@@ -478,7 +540,8 @@ def flatten(dwg: Drawing, include=None, exclude=None, keep_dimensions=False,
                     emit(be, xf, depth + 1, layer)
 
     def emit_text(ent, xf, layer, s, mtext=False):
-        s = _unescape((s or "").strip())
+        # C0 control characters (\x0b from AutoCAD line breaks, ...) are not allowed in XML 1.0
+        s = XML_BAD.sub(" ", _unescape((s or "").strip())).strip()
         if not s or not visible(layer):
             return
         h = ent.get(40, 2.5, float) * xf.scale
@@ -892,6 +955,24 @@ class Options:
     fallback_terminal: bool = True    # symbol without a lead (lamp, socket): one terminal on top
     simplify_px: float = 0.3          # Douglas-Peucker tolerance for polylines, px (0 = keep all points)
     step: str | None = None           # STEP model: fills width / height / depth (mm) for 3D
+    ident: str | None = None          # identity for the deterministic uuids (default: names; CLI: source file)
+
+
+ELMT_VERSION = "0.200"                # <definition version>: the QElectroTech release the format follows
+UUID_NS = uuidlib.uuid5(uuidlib.NAMESPACE_URL, "https://github.com/DP5000/dwg2qet")
+
+
+def _uuid(*key) -> str:
+    """The same uuid every time the same element is made again (uuid5 of the source and the part), so a
+    regenerated collection keeps the elements and wires of the projects that already use it."""
+    return "{" + str(uuidlib.uuid5(UUID_NS, "\x1f".join(key))) + "}"
+
+
+def source_ident(src, mode="symbol", include=None, exclude=None, block=None) -> str:
+    """Identity of an element made from a drawing: file name (not the folder, so a moved library keeps
+    its uuids), the block or layer filters that select the part, and the mode."""
+    parts = ["dwg2qet", Path(src).name, mode, block or "", "|".join(include or []), "|".join(exclude or [])]
+    return "\x1e".join(parts)
 
 
 INSUNITS_MM = {1: 25.4, 2: 304.8, 4: 1.0, 5: 10.0, 6: 1000.0, 13: 0.001, 14: 0.1}
@@ -1072,10 +1153,11 @@ def convert(dwg: Drawing, opts: Options, include=None, exclude=None) -> tuple:
     if link in ("simple", "master", "slave", "terminal") and not qterms:
         link = "thumbnail"
         report["note"] = "no terminal found: written as a thumbnail (give --terminal x,y to force one)"
-    root = ET.Element("definition", {"version": "0.100.0", "type": "element", "link_type": link,
+    root = ET.Element("definition", {"version": ELMT_VERSION, "type": "element", "link_type": link,
                                      "width": str(int(gx1 - gx0)), "height": str(int(gy1 - gy0)),
                                      "hotspot_x": str(int(-gx0)), "hotspot_y": str(int(-gy0))})
-    ET.SubElement(root, "uuid", {"uuid": "{" + str(uuidlib.uuid4()) + "}"})
+    ident = opts.ident or "dwg2qet:" + json.dumps(sorted((opts.names or {}).items()), ensure_ascii=False)
+    ET.SubElement(root, "uuid", {"uuid": _uuid(ident, opts.mode)})
     names = ET.SubElement(root, "names")
     for lang in sorted(opts.names or {"en": "Converted element"}):
         ET.SubElement(names, "name", {"lang": lang}).text = (opts.names or {"en": "Converted element"})[lang]
@@ -1091,19 +1173,25 @@ def convert(dwg: Drawing, opts: Options, include=None, exclude=None) -> tuple:
     ET.SubElement(root, "informations").text = (opts.author + "\n" if opts.author else "") + \
         f"Converted with dwg2qet {__version__}"
     desc = ET.SubElement(root, "description")
+    ntext = 0
     for kind, a in parts:
         if kind == "dynamic_text":
+            ntext += 1
             d = ET.SubElement(desc, "dynamic_text", {
                 "x": _fmt(a["x"]), "y": _fmt(a["y"]), "z": "10", "text_width": "-1",
                 "Halignment": "AlignLeft", "Valignment": "AlignTop", "frame": "false", "rotation": "0",
                 "keep_visual_rotation": "false", "text_from": "ElementInfo",
-                "uuid": "{" + str(uuidlib.uuid4()) + "}", "font": FONT.format(a["size"])})
+                "uuid": _uuid(ident, opts.mode, "text", a["info"], str(ntext)), "font": FONT.format(a["size"])})
             ET.SubElement(d, "text").text = ""
             ET.SubElement(d, "info_name").text = a["info"]
         else:
             ET.SubElement(desc, kind, {k: (_fmt(v) if isinstance(v, (int, float)) else str(v)) for k, v in a.items()})
+    seen: dict = {}
     for (tx, ty, o, nm) in qterms:
-        a = {"uuid": "{" + str(uuidlib.uuid4()) + "}", "x": _fmt(tx), "y": _fmt(ty), "orientation": o, "type": "Generic"}
+        # same name twice (or no name): the occurrence keeps them apart; terminals come in a fixed order
+        k = seen[nm or ""] = seen.get(nm or "", 0) + 1
+        a = {"uuid": _uuid(ident, opts.mode, "terminal", nm or "", str(k)), "x": _fmt(tx), "y": _fmt(ty),
+             "orientation": o, "type": "Generic"}
         a["name"] = nm or ""
         ET.SubElement(desc, "terminal", a)
     report.update({"width": int(gx1 - gx0), "height": int(gy1 - gy0), "link_type": link,
@@ -1263,6 +1351,8 @@ def main(argv=None):
     ap.add_argument("--link-type", choices=["simple", "master", "slave", "terminal", "thumbnail"])
     ap.add_argument("--author", help="text for the element's informations field")
     ap.add_argument("--step", help="STEP model of the same part: width/height/depth in mm go to the element information")
+    ap.add_argument("--ident", help="identity for the element's deterministic uuids (default: the input file "
+                    "name, mode and layer filters); keep it when you rename the drawing")
     ap.add_argument("--no-texts", action="store_true", help="drop the drawing's texts")
     ap.add_argument("--no-label", action="store_true", help="do not add label/comment fields")
     ap.add_argument("--preview", action="store_true", help="also write an .svg preview")
@@ -1282,7 +1372,13 @@ def main(argv=None):
         ap.error("give an input file or --batch")
     src = Path(ns.input)
     out = Path(ns.output) if ns.output else src.with_suffix(".elmt")
-    root, rep = convert(load(src), _options_from(ns), include=ns.layer, exclude=ns.exclude_layer)
+    opts = _options_from(ns)
+    opts.ident = ns.ident or source_ident(src, opts.mode, ns.layer, ns.exclude_layer)
+    try:
+        root, rep = convert(load(src), opts, include=ns.layer, exclude=ns.exclude_layer)
+    except (ValueError, OSError, RuntimeError) as exc:
+        print(f"dwg2qet: error: {exc}", file=sys.stderr)
+        return 2
     if ns.stdout:                       # nothing else on stdout or stderr: QElectroTech reads it as is
         ET.indent(root, space="    ")
         sys.stdout.buffer.write(ET.tostring(root, encoding="utf-8", xml_declaration=True))
@@ -1325,6 +1421,7 @@ def run_batch(ns):
                     o.link_type = row["link_type"]
                 inc = [x for x in (row.get("layer") or "").split("|") if x] or ns.layer
                 exc = [x for x in (row.get("exclude_layer") or "").split("|") if x] or ns.exclude_layer
+                o.ident = row.get("ident") or source_ident(src, o.mode, inc, exc, block=row.get("output"))
                 root, rep = convert(cache[key], o, include=inc, exclude=exc)
                 out = out_dir / row["output"]
                 write_elmt(root, out)

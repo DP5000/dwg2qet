@@ -68,7 +68,7 @@ exec python3 /path/to/dwg2qet.py "$@"
 
 One row per element. Columns: `source`, `output` (relative to `--out-dir`), optional `mode`
 (`symbol` / `thumbnail`), `layer`, `exclude_layer` (regex, `|`-separated), `link_type`, `step` (STEP model),
-`name_<lang>`, `info_<key>`, `kind_<key>`, `category_<lang>` (name of the output folder).
+`name_<lang>`, `info_<key>`, `kind_<key>`, `category_<lang>` (name of the output folder), `ident` (see below).
 See [`examples/manifest.csv`](examples/manifest.csv).
 
 ### Options that matter
@@ -84,6 +84,15 @@ See [`examples/manifest.csv`](examples/manifest.csv).
 | `--thin-layer` | draw these layers with a thin pen (details of a front view) |
 | `--step` | STEP (AP203/AP214) 3D model of the part: width, height and depth in mm come from it, the file name goes to `notes` |
 | `--json` | print the conversion report (terminals, size, notes) |
+| `--ident` | identity for the deterministic uuids (default: input file name, mode and layer filters) |
+
+### Stable uuids
+
+The element and every terminal and text field get a **uuid5**, built from the drawing's file name (not its
+folder), the mode, the layer filters and, in a batch, the output path of the row; terminals add their name
+(and their occurrence when two share a name). Making a collection again therefore gives the same uuids, and
+the projects that already use an element keep their wires. When a drawing is renamed, keep its uuids with
+`--ident` (or an `ident` column in the batch manifest) set to the old identity.
 
 ## How terminals are found
 

@@ -32,7 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dwg2qet as D  # noqa: E402
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 SIDES = ("top", "bottom", "left", "right")
 ORIENTATION = {"top": "n", "bottom": "s", "left": "w", "right": "e"}
@@ -362,10 +362,11 @@ def build_front_box(spec_dims: dict, names: dict, info: dict, lines: list, side:
     parts, W, H = draw_front_box(w, h, lines, side, ports, px_per_mm)
     x0, y0 = -10, -20
     x1, y1 = _up10(W + 10), _up10(H + 10)
-    root = ET.Element("definition", {"version": "0.100.0", "type": "element", "link_type": "thumbnail",
+    root = ET.Element("definition", {"version": "0.200", "type": "element", "link_type": "thumbnail",
                                      "width": str(int(x1 - x0)), "height": str(int(y1 - y0)),
                                      "hotspot_x": str(int(-x0)), "hotspot_y": str(int(-y0))})
-    ET.SubElement(root, "uuid", {"uuid": _uuid(key, "front") if key else "{" + str(uuidlib.uuid4()) + "}"})
+    key = key or json.dumps(sorted(names.items()), ensure_ascii=False)   # no id: the names identify it
+    ET.SubElement(root, "uuid", {"uuid": _uuid(key, "front")})
     nm = ET.SubElement(root, "names")
     for lang in sorted(names):
         ET.SubElement(nm, "name", {"lang": lang}).text = names[lang]
@@ -381,7 +382,7 @@ def build_front_box(spec_dims: dict, names: dict, info: dict, lines: list, side:
                 "x": D._fmt(a["x"]), "y": D._fmt(a["y"]), "z": "10", "text_width": "-1",
                 "Halignment": "AlignLeft", "Valignment": "AlignTop", "frame": "false", "rotation": "0",
                 "keep_visual_rotation": "false", "text_from": "ElementInfo",
-                "uuid": "{" + str(uuidlib.uuid4()) + "}", "font": D.FONT.format(a["size"])})
+                "uuid": _uuid(key, "text", a["info"], str(len(desc))), "font": D.FONT.format(a["size"])})
             ET.SubElement(d, "text").text = ""
             ET.SubElement(d, "info_name").text = a["info"]
         else:
@@ -393,10 +394,11 @@ def build_element(parts, qterms, W, H, names: dict, info: dict, informations: st
                   link_type="simple", key="") -> ET.Element:
     # room for the terminal numbers outside the box, everything on the 10 px grid
     x0, y0, x1, y1 = -lay.lead - 10, -lay.lead - 10, W + lay.lead + 20, H + lay.lead + 10
-    root = ET.Element("definition", {"version": "0.100.0", "type": "element", "link_type": link_type,
+    root = ET.Element("definition", {"version": "0.200", "type": "element", "link_type": link_type,
                                      "width": str(int(x1 - x0)), "height": str(int(y1 - y0)),
                                      "hotspot_x": str(int(-x0)), "hotspot_y": str(int(-y0))})
-    ET.SubElement(root, "uuid", {"uuid": _uuid(key) if key else "{" + str(uuidlib.uuid4()) + "}"})
+    key = key or json.dumps(sorted(names.items()), ensure_ascii=False)   # no id: the names identify it
+    ET.SubElement(root, "uuid", {"uuid": _uuid(key)})
     nm = ET.SubElement(root, "names")
     for lang in sorted(names):
         ET.SubElement(nm, "name", {"lang": lang}).text = names[lang]
@@ -413,13 +415,13 @@ def build_element(parts, qterms, W, H, names: dict, info: dict, informations: st
                 "x": D._fmt(a["x"]), "y": D._fmt(a["y"]), "z": "10", "text_width": "-1",
                 "Halignment": "AlignLeft", "Valignment": "AlignTop", "frame": "false", "rotation": "0",
                 "keep_visual_rotation": "false", "text_from": "ElementInfo",
-                "uuid": "{" + str(uuidlib.uuid4()) + "}", "font": D.FONT.format(a["size"])})
+                "uuid": _uuid(key, "text", a["info"], str(len(desc))), "font": D.FONT.format(a["size"])})
             ET.SubElement(d, "text").text = ""
             ET.SubElement(d, "info_name").text = a["info"]
         else:
             ET.SubElement(desc, kind, {k: (D._fmt(v) if isinstance(v, (int, float)) else str(v)) for k, v in a.items()})
     for x, y, o, n in qterms:
-        ET.SubElement(desc, "terminal", {"uuid": _uuid(key, n) if key else "{" + str(uuidlib.uuid4()) + "}",
+        ET.SubElement(desc, "terminal", {"uuid": _uuid(key, n),
                                          "x": D._fmt(x), "y": D._fmt(y),
                                          "orientation": o, "type": "Generic", "name": n})
     return root
@@ -457,7 +459,8 @@ def make_device(spec: dict, base: Path, out: Path, front_out: Path | None = None
         finfo = {k: v for k, v in info.items() if k not in ("width", "height", "depth")}
         finfo["exclude_from_bom"] = "true"            # the schematic symbol carries the bill of materials
         o = D.Options(mode="thumbnail", px_per_mm=float(fv.get("px_per_mm", 2.0)), names=fnames, info=finfo,
-                      step=str(step) if step else None)
+                      step=str(step) if step else None,
+                      ident="terminals2qet:" + str(spec.get("id") or "") + ":front:" + src.name)
         root, rep = D.convert(D.load(src), o, exclude=fv.get("exclude_layers"))
         D.write_elmt(root, front_out)
         report["front_view"] = {"file": str(front_out), "size_px": [rep["width"], rep["height"]]}
