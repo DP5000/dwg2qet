@@ -147,6 +147,13 @@ The two SEW examples come from SEW's public documentation (MOVITRAC B system man
 compact operating instructions 11/2017). The front views and STEP models referenced by `front_view` are SEW's
 own CAD downloads (SEW Online Support > CAD data). They are not part of this repository.
 
+## Ready-made collections
+
+[`collections/`](collections) holds element libraries generated with these tools: 288 PV and storage devices
+(Sigenergy, Victron, SolarEdge, GoodWe, Dyness, Pylontech, FoxESS, Sungrow, AndSolar, PV modules …), each with
+a symbol that has all its terminals and a front view in scale, plus the two SEW-EURODRIVE drives. Every element
+names the manufacturer document it was made from. CC-BY 3.0, see [collections/README.md](collections/README.md).
+
 ## Tests
 
 ```bash
@@ -166,4 +173,4 @@ Pretvornik risb DWG in DXF v elemente QElectroTech. Simbol dobi priključke na m
 pravimi imeni (1, 2, A1, A2 …), polja za oznako in podatke ter podatke za kosovnico in mere za
 2D in 3D. Pogled od spredaj je v merilu (2 px = 1 mm). Iz manifesta CSV pretvori celotno
 knjižnico proizvajalca. `terminals2qet.py` iz tabele priključkov v priročniku nariše simbol
-zahtevne naprave (pretvornik, PLC, razsmernik), skupaj s pogledom za omaro in merami iz STEP. Avtor: David Podlesnik (Elektro David Podlesnik s.p.). Licenca MIT.
+zahtevne naprave (pretvornik, PLC, razsmernik), skupaj s pogledom za omaro in merami iz STEP. V mapi `collections/` so gotove zbirke: 288 naprav za PV in hranilnike ter SEW (CC-BY 3.0). Avtor: David Podlesnik (Elektro David Podlesnik s.p.). Licenca MIT.
